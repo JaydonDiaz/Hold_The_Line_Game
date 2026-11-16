@@ -93,7 +93,55 @@ body {
 		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
 <link rel="manifest" href="index.manifest.json">
-
+<script>
+// Phones: keep the game's sound playing. Browsers only let audio start from a tap (iPhone:
+// a finger lifted, not just touched), and pause it again when the page is put away; every
+// audio context the game makes is resumed on each tap and when the page comes back. On an
+// iPhone the sound is also marked as media playback, so the silent switch doesn't mute it,
+// and the first tap plays a moment of silence to open the audio session; and where the
+// browser allows it (Android), the screen is held upright.
+(function () {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  var contexts = [];
+  var Original = window.AudioContext || window.webkitAudioContext;
+  if (Original) {
+    var Kept = function (options) {
+      var ctx = options === undefined ? new Original() : new Original(options);
+      contexts.push(ctx);
+      return ctx;
+    };
+    Kept.prototype = Original.prototype;
+    window.AudioContext = Kept;
+    if (window.webkitAudioContext) window.webkitAudioContext = Kept;
+  }
+  function resume() {
+    contexts.forEach(function (c) { if (c.state !== 'running') { c.resume().catch(function () {}); } });
+  }
+  function silence() {
+    var n = 800, buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+    function tag(at, s) { for (var i = 0; i < s.length; i++) v.setUint8(at + i, s.charCodeAt(i)); }
+    tag(0, 'RIFF'); v.setUint32(4, 36 + n, true); tag(8, 'WAVE'); tag(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+    tag(36, 'data'); v.setUint32(40, n, true);
+    for (var i = 0; i < n; i++) v.setUint8(44 + i, 128);
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+  var first = true;
+  function tapped() {
+    resume();
+    if (!first) return;
+    first = false;
+    try { var a = new Audio(silence()); a.setAttribute('playsinline', ''); a.play().catch(function () {}); } catch (e) {}
+    try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(function () {}); } catch (e) {}
+  }
+  ['touchstart', 'touchend', 'pointerup', 'click', 'keydown'].forEach(function (e) {
+    window.addEventListener(e, tapped, { capture: true, passive: true });
+  });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) resume(); });
+  window.addEventListener('pageshow', resume);
+})();
+</script>
 	</head>
 	<body>
 		<canvas id="canvas">
@@ -112,7 +160,7 @@ body {
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":1204256,"index.wasm":37024354},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":1206128,"index.wasm":37024354},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
 const GODOT_THREADS_ENABLED = true;
 const engine = new Engine(GODOT_CONFIG);
 
