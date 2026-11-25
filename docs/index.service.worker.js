@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1795627245|1992495';
+const CACHE_VERSION = '1795629756|1211751';
 /** @type {string} */
 const CACHE_PREFIX = 'Hold the Line-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
@@ -21,18 +21,24 @@ const CACHEABLE_FILES = ["index.wasm","index.pck"];
 const FULL_CACHE = CACHED_FILES.concat(CACHEABLE_FILES);
 
 self.addEventListener('install', (event) => {
-	event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CACHED_FILES)));
+	event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CACHED_FILES)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
 	event.waitUntil(caches.keys().then(
 		function (keys) {
-			// Remove old caches.
-			return Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map((key) => caches.delete(key)));
+			// Remove old caches (and remember whether there were any: an update, not a first visit).
+			const old = keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME);
+			self.wasUpdate = old.length > 0;
+			return Promise.all(old.map((key) => caches.delete(key)));
 		}
 	).then(function () {
 		// Enable navigation preload if available.
 		return ('navigationPreload' in self.registration) ? self.registration.navigationPreload.enable() : Promise.resolve();
+	}).then(function () {
+		// Hold the Line: take over now, and reload pages still running an older version.
+		if (!self.wasUpdate) return Promise.resolve();
+		return self.clients.claim().then(() => self.clients.matchAll({ type: 'window' })).then((all) => all.forEach((c) => c.navigate(c.url)));
 	}));
 });
 
